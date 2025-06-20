@@ -3,8 +3,8 @@
 // They provide more information and details
 // This is what you see in the About tab when you attach the expert advisor to a chart.
 #property link          "https://www.earnforex.com/metatrader-expert-advisors/mt5-ea-template/"
-#property version       "1.00"
-#property copyright     "EarnForex.com - 2024"
+#property version       "1.01"
+#property copyright     "EarnForex.com - 2025"
 #property description   "A basic expert advisor template for MT5."
 #property description   ""
 #property description   "WARNING: There is no guarantee that this expert advisor will work as intended. Use at your own risk."
@@ -263,11 +263,14 @@ bool InitializeHandles()
         return false;
     }*/
     // ATR handle for stop-loss and take-profit.
-    ATRHandle = iATR(Symbol(), ATRTimeFrame, ATRPeriod);
-    if (ATRHandle == INVALID_HANDLE)
+    if ((StopLossMode == SL_AUTO) || (TakeProfitMode == TP_AUTO) || (UsePartialClose)) // Only initialize ATR handles when ATR is used.
     {
-        PrintFormat("Unable to create ATR handle - %s - %d.", GetLastErrorText(GetLastError()), GetLastError());
-        return false;
+        ATRHandle = iATR(Symbol(), ATRTimeFrame, ATRPeriod);
+        if (ATRHandle == INVALID_HANDLE)
+        {
+            PrintFormat("Unable to create ATR handle - %s - %d.", GetLastErrorText(GetLastError()), GetLastError());
+            return false;
+        }
     }
     return true;
 }
@@ -291,8 +294,15 @@ bool OpenBuy()
     double StopLossPrice = StopLoss(ORDER_TYPE_BUY, OpenPrice); // Calculate SL based on direction, price, and SL rules.
     double TakeProfitPrice = TakeProfit(ORDER_TYPE_BUY, OpenPrice); // Calculate TP based on direction, price, and TP rules.
     double Size = LotSize(StopLossPrice, OpenPrice); // Calculate position size based on the SL, price, and the given rules.
+    // Adjust for tick size granularity.
+    double TickSize = SymbolInfoDouble(Symbol(), SYMBOL_TRADE_TICK_SIZE);
+    if (TickSize > 0)
+    {
+        StopLossPrice = NormalizeDouble(MathRound(StopLossPrice / TickSize) * TickSize, Digits());
+        TakeProfitPrice = NormalizeDouble(MathRound(TakeProfitPrice / TickSize) * TickSize, Digits());
+    }
     // Use the standard Trade object to open the position with calculated parameters.
-    if (!Trade.Buy(Size, Symbol(), OpenPrice, StopLossPrice, TakeProfitPrice))
+    if (!Trade.Buy(Size, Symbol(), OpenPrice, StopLossPrice, TakeProfitPrice, OrderNote))
     {
         PrintFormat("Unable to open BUY: %s - %d", Trade.ResultRetcodeDescription(), Trade.ResultRetcode());
         return false;
@@ -309,8 +319,15 @@ bool OpenSell()
     double StopLossPrice = StopLoss(ORDER_TYPE_SELL, OpenPrice); // Calculate SL based on direction, price, and SL rules.
     double TakeProfitPrice = TakeProfit(ORDER_TYPE_SELL, OpenPrice); // Calculate TP based on direction, price, and TP rules.
     double Size = LotSize(StopLossPrice, OpenPrice); // Calculate position size based on the SL, price, and the given rules.
+    // Adjust for tick size granularity.
+    double TickSize = SymbolInfoDouble(Symbol(), SYMBOL_TRADE_TICK_SIZE);
+    if (TickSize > 0)
+    {
+        StopLossPrice = NormalizeDouble(MathRound(StopLossPrice / TickSize) * TickSize, Digits());
+        TakeProfitPrice = NormalizeDouble(MathRound(TakeProfitPrice / TickSize) * TickSize, Digits());
+    }
     // Use the standard Trade object to open the position with calculated parameters.
-    if (!Trade.Sell(Size, Symbol(), OpenPrice, StopLossPrice, TakeProfitPrice))
+    if (!Trade.Sell(Size, Symbol(), OpenPrice, StopLossPrice, TakeProfitPrice, OrderNote))
     {
         PrintFormat("Unable to open SELL: %s - %d", Trade.ResultRetcodeDescription(), Trade.ResultRetcode());
         return false;
@@ -560,16 +577,19 @@ bool GetIndicatorsData()
     {
         AllDataAvailable = true;
 
-        count = CopyBuffer(ATRHandle, 0, 0, 2, buf); // Copy using ATR indicator handle 2 latest values from 0th buffer to the buf array.
-        if ((count < 2) || (buf[0] == NULL) || (buf[0] == EMPTY_VALUE))
+        if ((StopLossMode == SL_AUTO) || (TakeProfitMode == TP_AUTO) || (UsePartialClose)) // Only copy ATR buffers when ATR is used.
         {
-            Print("Unable to get ATR values.");
-            AllDataAvailable = false;
-        }
-        else
-        {
-            ATR_current = buf[1];
-            ATR_previous = buf[0];
+            count = CopyBuffer(ATRHandle, 0, 0, 2, buf); // Copy using ATR indicator handle 2 latest values from 0th buffer to the buf array.
+            if ((count < 2) || (buf[0] == NULL) || (buf[0] == EMPTY_VALUE))
+            {
+                Print("Unable to get ATR values.");
+                AllDataAvailable = false;
+            }
+            else
+            {
+                ATR_current = buf[1];
+                ATR_previous = buf[0];
+            }
         }
         
         // This is where the main indicator data is read.
@@ -585,6 +605,8 @@ bool GetIndicatorsData()
             Indicator_current = buf[1];
             Indicator_previous = buf[0];
         }*/
+        
+        if (AllDataAvailable) return true;
 
         Attempt++;
         Sleep(DelayBetweenAttempts);
