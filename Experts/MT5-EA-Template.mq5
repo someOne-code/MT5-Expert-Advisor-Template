@@ -10,6 +10,7 @@
 #property description   "WARNING: There is no guarantee that this expert advisor will work as intended. Use at your own risk."
 #property description   ""
 #property description   "Find more on www.EarnForex.com"
+#property description   "Recommended Timeframe: M5"
 #property icon          "\\Files\\EF-Icon-64x64px.ico"
 
 //-INCLUDES-//
@@ -55,6 +56,14 @@ enum ENUM_MODE_TP
 // EA Parameters
 input string Comment_0 = "==========";          // EA-Specific Parameters
 // !! Declare parameters specific to your EA here.
+input double LotSize = 0.01;
+input int MA_Period = 50;
+input ENUM_MA_METHOD MA_Method = MODE_EMA;  // EMA/SMA seçilebilir
+input int DelayMinutes = 25;
+input int MaxOpenTrades = 3;
+input double TakeProfitUSD = 10.0;
+input long MagicNumber = 20260201;
+
 // For example, a moving average period, an RSI level, or anything else your EA needs to know to implement its trading strategy.
 // All input parameters start with 'input' keyword.
 // input int example = 10; // This is an example input parameter
@@ -96,7 +105,7 @@ input double PartialClosePerc = 50;                                // Partial cl
 input double ATRMultiplierPC = 1;                                  // ATR multiplier for partial close
 
 input string Comment_d = "==========";                             // Additional Settings
-input int MagicNumber = 0;                                         // Magic number
+// input int MagicNumber = 0;                                         // Magic number (Replaced by global input)
 input string OrderNote = "";                                       // Comment for orders
 input int Slippage = 5;                                            // Slippage in points
 input int MaxSpread = 50;                                          // Maximum allowed spread to trade, in points
@@ -108,6 +117,10 @@ int ATRHandle; // Indicator handle for ATR.
 int IndicatorHandle = -1; // Global indicator handle for the EA's main signal indicator.
 double ATR_current, ATR_previous; // ATR values.
 double Indicator_current, Indicator_previous; // Indicator values.
+
+enum PendingSignal { PENDING_NONE, PENDING_BUY, PENDING_SELL };
+PendingSignal pending = PENDING_NONE;
+datetime pendingSince = 0;
 
 // Here go all the event handling functions. They all run on specific events generated for the expert advisor.
 // All event handlers are optional and can be removed if you don't need to process that specific event.
@@ -187,7 +200,7 @@ double OnTester()
     if (InitialDeposit == 0) return 0; // Avoiding division by zero.
     if (TotalTrades == 0) return -100; // Discard a backtest with zero trades.
     if ((TotalTrades > 0) && (MaxDrawDownPerc == 0)) MaxDrawDownPerc = 0.01; // Avoiding division by zero.
-    
+
     double NetProfitPerc = NetProfit / InitialDeposit * 100;
 
     double Max = 0;
@@ -203,27 +216,99 @@ double OnTester()
 // Entry and exit processing
 void ProcessTick()
 {
+    // Check for New Bar
+    if (IsNewBar())
+    {
+        Print("NEW BAR: ", TimeToString(iTime(Symbol(), Period(), 0)));
+
+        double ma_buf[3];
+        ArraySetAsSeries(ma_buf, true);
+        if (CopyBuffer(IndicatorHandle, 0, 0, 3, ma_buf) == 3)
+        {
+             double ma0 = ma_buf[0];
+             double ma1 = ma_buf[1];
+             double ma2 = ma_buf[2];
+
+             double slope_now = ma0 - ma1;
+             double slope_prev = ma1 - ma2;
+
+             PrintFormat("MA: %.5f/%.5f/%.5f | Slope: Now=%.5f Prev=%.5f", ma0, ma1, ma2, slope_now, slope_prev);
+
+             // Turn Detection
+             if (slope_prev < 0 && slope_now > 0)
+             {
+                 pending = PENDING_BUY;
+                 pendingSince = TimeCurrent();
+                 Print("TURN detected -> PENDING BUY started at ", TimeToString(pendingSince));
+             }
+             else if (slope_prev > 0 && slope_now < 0)
+             {
+                 pending = PENDING_SELL;
+                 pendingSince = TimeCurrent();
+                 Print("TURN detected -> PENDING SELL started at ", TimeToString(pendingSince));
+             }
+
+             // Task 6: Log Max Open Trades
+             int openCount = CountPositions();
+             PrintFormat("Open Positions: %d | Max: %d", openCount, MaxOpenTrades);
+
+             // Task 7: Execution Logic
+             if (pending != PENDING_NONE)
+             {
+                 // Check delay (real time)
+                 if (TimeCurrent() - pendingSince >= DelayMinutes * 60)
+                 {
+                     bool confirm = false;
+                     if (pending == PENDING_BUY && slope_now > 0) confirm = true;
+                     if (pending == PENDING_SELL && slope_now < 0) confirm = true;
+
+                     if (confirm)
+                     {
+                         if (openCount < MaxOpenTrades)
+                         {
+                             bool result = false;
+                             if (pending == PENDING_BUY)
+                                 result = Trade.Buy(LotSize, Symbol(), 0, 0, 0, "MA_TURN_EA");
+                             else
+                                 result = Trade.Sell(LotSize, Symbol(), 0, 0, 0, "MA_TURN_EA");
+
+                             if (result)
+                             {
+                                 Print("Pending executed successfully.");
+                                 pending = PENDING_NONE;
+                             }
+                             else
+                             {
+                                 Print("Order execution failed: ", Trade.ResultRetcodeDescription());
+                             }
+                         }
+                         else
+                         {
+                             Print("Max trades reached. Pending retained.");
+                         }
+                     }
+                     else
+                     {
+                         Print("Pending execution failed confirmation (slope lost/reversed). Pending cancelled.");
+                         pending = PENDING_NONE;
+                     }
+                 }
+             }
+        }
+        else
+        {
+             Print("Error copying MA buffer: ", GetLastError());
+        }
+    }
+
     if (!GetIndicatorsData()) return;
-    
+
     if (CountPositions())
     {
         // There is a position open. Manage SL, TP, or close if necessary.
         if (UsePartialClose) PartialCloseAll();
         CheckExitSignal();
     }
-
-    // A block of code that lets the subsequent code execute only when a new bar appears on the chart.
-    // This means that the entry signals will be checked only twice per bar.
-    /* static datetime current_bar_time = WRONG_VALUE;
-    datetime previous_bar_time = current_bar_time;
-    current_bar_time = iTime(Symbol(), Period(), 0);
-    static int ticks_of_new_bar = 0; // Process two ticks of each new bar to allow indicator buffers to refresh.
-    if (current_bar_time == previous_bar_time)
-    {
-        ticks_of_new_bar++;
-        if (ticks_of_new_bar > 1) return; // Skip after two ticks.
-    } 
-    else ticks_of_new_bar = 0; */
 
     // The number is recalculated after the first call because some trades could have been gotten closed.
     if (CountPositions() < MaxPositions) CheckEntrySignal(); // Check entry signals only if there aren't too many positions already.
@@ -256,12 +341,12 @@ int CountPositions()
 bool InitializeHandles()
 {
     // Indicator handle is the main handle for the signal generating indicator.
-    /*IndicatorHandle = iMA(Symbol(), Period(), MA_Period, MA_Shift, MA_Mode, MA_Price);
+    IndicatorHandle = iMA(Symbol(), Period(), MA_Period, 0, MA_Method, PRICE_CLOSE);
     if (IndicatorHandle == INVALID_HANDLE)
     {
         PrintFormat("Unable to create main indicator handle - %s - %d.", GetLastErrorText(GetLastError()), GetLastError());
         return false;
-    }*/
+    }
     // ATR handle for stop-loss and take-profit.
     if ((StopLossMode == SL_AUTO) || (TakeProfitMode == TP_AUTO) || (UsePartialClose)) // Only initialize ATR handles when ATR is used.
     {
@@ -531,7 +616,7 @@ double LotSize(double stop_loss, double open_price)
             Size = DefaultLotSize;
         }
     }
-    
+
     // Normalize the Lot Size to satisfy the allowed lot increment and minimum and maximum position size.
     double LotStep = SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_STEP);
     double MaxLot = SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_MAX);
@@ -543,7 +628,7 @@ double LotSize(double stop_loss, double open_price)
     if (Size > MaxLot) Size = MaxLot;
     // If the lot size is too small, then set it to 0 and don't trade.
     if ((Size < MinLotSize) || (Size < MinLot)) Size = 0;
-    
+
     return Size;
 }
 
@@ -591,7 +676,7 @@ bool GetIndicatorsData()
                 ATR_previous = buf[0];
             }
         }
-        
+
         // This is where the main indicator data is read.
         // !! Uncomment and modify to use indicator values in your entry and exit signals
         /*count = CopyBuffer(IndicatorHandle, 0, 1, 2, buf); // Copying using main indicator handle 2 latest completed candles (hence starting from the 1st, and not 0th, candle) from 0th buffer to the buf array.
@@ -605,7 +690,7 @@ bool GetIndicatorsData()
             Indicator_current = buf[1];
             Indicator_previous = buf[0];
         }*/
-        
+
         if (AllDataAvailable) return true;
 
         Attempt++;
@@ -633,7 +718,7 @@ void CheckEntrySignal()
 
     // This is where you should insert your entry signal for BUY orders.
     // Include a condition to open a buy order, the condition will have to set BuySignal to true or false.
-   
+
     //!! Uncomment and modify this buy entry signal check line:
     //if ((Indicator_current > iClose(Symbol(), Period(), 1)) && (Indicator_previous <= iClose(Symbol(), Period(), 2))) BuySignal = true; // Check if the indicator's value crossed the Close price level from below.
 
@@ -646,7 +731,7 @@ void CheckEntrySignal()
 
     // This is where you should insert your entry signal for SELL orders.
     // Include a condition to open a sell order, the condition will have to set SellSignal to true or false.
-    
+
     //!! Uncomment and modify this sell entry signal check line:
     //if ((Indicator_current < iClose(Symbol(), Period(), 1)) && (Indicator_previous >= iClose(Symbol(), Period(), 2))) SellSignal = true; // Check if the indicator's value crossed the Close price level from above.
 
@@ -659,17 +744,29 @@ void CheckEntrySignal()
 // Exit signal
 void CheckExitSignal()
 {
-    //!! if ((UseTradingHours) && (!IsCurrentTimeInInterval(TradingHourStart, TradingHourEnd))) return; // Trading hours restrictions for exit. Normally, you don't want to restrict exit by hours. Still, it's a possibility.
-
-    bool SignalExitLong = false;
-    bool SignalExitShort = false;
-
-    //!! Uncomment and modify these exit signal checks:
-    //if ((Indicator_current > iClose(Symbol(), Period(), 1)) && (Indicator_previous <= iClose(Symbol(), Period(), 2))) SignalExitShort = true; // Check if the indicator's value crossed the Close price level from below.
-    //else if ((Indicator_current < iClose(Symbol(), Period(), 1)) && (Indicator_previous >= iClose(Symbol(), Period(), 2))) SignalExitLong = true; // Check if the indicator's value crossed the Close price level from above.
-
-    if (SignalExitLong) CloseAllBuy();
-    if (SignalExitShort) CloseAllSell();
+    int total = PositionsTotal();
+    for(int i=total-1; i>=0; i--)
+    {
+        string symbol = PositionGetSymbol(i);
+        if(symbol == Symbol() && PositionGetInteger(POSITION_MAGIC) == MagicNumber)
+        {
+            double profit = PositionGetDouble(POSITION_PROFIT);
+            // Check if profit >= TakeProfitUSD
+            if(profit >= TakeProfitUSD)
+            {
+                ulong ticket = PositionGetInteger(POSITION_TICKET);
+                PrintFormat("TPUSD hit for ticket %d: Profit=%.2f >= Target=%.2f", ticket, profit, TakeProfitUSD);
+                if(Trade.PositionClose(ticket))
+                {
+                    Print("Position closed successfully.");
+                }
+                else
+                {
+                    Print("Position close failed: ", Trade.ResultRetcodeDescription());
+                }
+            }
+        }
+    }
 }
 
 // Dynamic stop-loss calculation
@@ -779,5 +876,18 @@ void PartialCloseAll()
             return;
         }
     }
+}
+
+// Check for a new bar.
+bool IsNewBar()
+{
+    static datetime last_time = 0;
+    datetime current_time = iTime(Symbol(), Period(), 0);
+    if(last_time != current_time)
+    {
+        last_time = current_time;
+        return true;
+    }
+    return false;
 }
 //+------------------------------------------------------------------+
