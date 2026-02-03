@@ -262,8 +262,8 @@ bool CheckGate()
    if (currentMinutes < gateMinutes)
    {
        // Gate Closed
-       PrintFormat("Gate CLOSED. Current: %s (Day %d) < Gate: Day %d %02d:%02d",
-           TimeToString(TimeCurrent()), dt.day_of_week, InpGateDay, InpGateHour, InpGateMinute);
+       PrintFormat("GATE CLOSED until Mon 05:00 (Config: Day %d %02d:%02d)",
+           InpGateDay, InpGateHour, InpGateMinute);
        return false;
    }
 
@@ -300,6 +300,7 @@ void ProcessTick()
 
         // Task 4: Gate Check
         bool gateOpen = CheckGate();
+        if (gateOpen) Print("GATE OPENED");
 
         // Task 5: MA Filter
         double maValue = GetMA();
@@ -452,6 +453,7 @@ void ExecuteTrades()
         }
 
         bool res = false;
+        // SL and TP set to 0 (Unset) as per strategy design "Approach A".
         if (pending == PENDING_BUY)
              res = Trade.Buy(InpLotSize, Symbol(), 0, 0, 0, InpComment);
         else if (pending == PENDING_SELL)
