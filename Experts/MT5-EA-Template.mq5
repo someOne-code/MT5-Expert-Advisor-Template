@@ -54,61 +54,70 @@ enum ENUM_MODE_TP
 };
 
 // EA Parameters
-input string Comment_0 = "==========";          // EA-Specific Parameters
-// !! Declare parameters specific to your EA here.
-input double LotSize = 0.01;
-input int MA_Period = 50;
-input ENUM_MA_METHOD MA_Method = MODE_EMA;  // EMA/SMA seçilebilir
-input int DelayMinutes = 25;
-input int MaxOpenTrades = 3;
-input double TakeProfitUSD = 10.0;
-input long MagicNumber = 20260201;
+input group "Strategy Settings"
+input double InpLotSize = 0.01;        // Lot Size
+input int InpMAHours = 7;              // Moving Average Hours (7)
+input int InpTrendPeriod = 25;         // Trend Confirmation Candles (25)
+input int InpDelaySeconds = 20;        // Max Entry Delay (Seconds)
+input double InpMinProfit = 10.0;      // Minimum Profit (Slow Target)
+input double InpMaxProfit = 50.0;      // Maximum Profit (Fast Target)
+input int InpMinTrades = 2;            // Min Trades per Signal
+input int InpMaxTrades = 7;            // Max Trades per Signal
+input int InpMomentumTime = 60;        // Momentum Time Threshold (Seconds)
+input double InpMaxSpreadPoints = 0;   // Max Spread (Points, 0=Disabled)
 
-// For example, a moving average period, an RSI level, or anything else your EA needs to know to implement its trading strategy.
-// All input parameters start with 'input' keyword.
-// input int example = 10; // This is an example input parameter
+input group "Time Settings"
+input bool InpEnableSundayGate = false; // Enable Start Gate
+input int InpGateHour = 5;             // Gate Hour (e.g. 05:00)
+input int InpGateMinute = 0;           // Gate Minute
+input int InpGateDay = 1;              // Gate Day (0=Sun, 1=Mon, etc. - Default Mon)
 
-input string Comment_1 = "==========";  // Trading Hours Settings
-input bool UseTradingHours = false;     // Limit trading hours
-input ENUM_HOUR TradingHourStart = h07; // Trading start hour (Broker server hour)
-input ENUM_HOUR TradingHourEnd = h19;   // Trading end hour (Broker server hour)
+input group "EA Settings"
+input long InpMagicNumber = 20240101;  // Magic Number
+input string InpComment = "JulesEA";   // Order Comment
 
-input string Comment_2 = "==========";  // ATR Settings
-input int ATRPeriod = 100;              // ATR period
-input ENUM_TIMEFRAMES ATRTimeFrame = PERIOD_CURRENT; // ATR timeframe
-input double ATRMultiplierSL = 2;       // ATR multiplier for stop-loss
-input double ATRMultiplierTP = 3;       // ATR multiplier for take-profit
+// Existing Inputs (Kept for compatibility where needed or commented out if replaced)
+// input double LotSize = 0.01; // Replaced by InpLotSize
+// input int MA_Period = 50;    // Replaced
+// input long MagicNumber = ... // Replaced by InpMagicNumber
 
-// General input parameters
-input string Comment_a = "==========";                             // Risk Management Settings
-input ENUM_RISK_DEFAULT_SIZE RiskDefaultSize = RISK_DEFAULT_FIXED; // Position size mode
-input double DefaultLotSize = 0.01;                                // Position size (if fixed or if no stop loss defined)
-input ENUM_RISK_BASE RiskBase = RISK_BASE_BALANCE;                 // Risk base
-input int MaxRiskPerTrade = 2;                                     // Percentage to risk each trade
-input double MinLotSize = 0.01;                                    // Minimum position size allowed
-input double MaxLotSize = 100;                                     // Maximum position size allowed
-input int MaxPositions = 1;                                        // Maximum number of positions for this EA
+// Trading Hours (Legacy - can be removed or kept)
+input bool UseTradingHours = false;
+input ENUM_HOUR TradingHourStart = h07;
+input ENUM_HOUR TradingHourEnd = h19;
 
-input string Comment_b = "==========";                             // Stop-Loss and Take-Profit Settings
-input ENUM_MODE_SL StopLossMode = SL_FIXED;                        // Stop-loss mode
-input int DefaultStopLoss = 0;                                     // Default stop-loss in points (0 = no stop-loss)
-input int MinStopLoss = 0;                                         // Minimum allowed stop-loss in points
-input int MaxStopLoss = 5000;                                      // Maximum allowed stop-loss in points
-input ENUM_MODE_TP TakeProfitMode = TP_FIXED;                      // Take-profit mode
-input int DefaultTakeProfit = 0;                                   // Default take-profit in points (0 = no take-profit)
-input int MinTakeProfit = 0;                                       // Minimum allowed take-profit in points
-input int MaxTakeProfit = 5000;                                    // Maximum allowed take-profit in points
+// ATR Settings (Legacy - needed for Utils/Handlers)
+input int ATRPeriod = 100;
+input ENUM_TIMEFRAMES ATRTimeFrame = PERIOD_CURRENT;
+input double ATRMultiplierSL = 2;
+input double ATRMultiplierTP = 3;
 
-input string Comment_c = "==========";                             // Partial Close Settings
-input bool UsePartialClose = false;                                // Use partial close
-input double PartialClosePerc = 50;                                // Partial close percentage
-input double ATRMultiplierPC = 1;                                  // ATR multiplier for partial close
+// Risk Management (Legacy)
+input ENUM_RISK_DEFAULT_SIZE RiskDefaultSize = RISK_DEFAULT_FIXED;
+input double DefaultLotSize = 0.01;
+input ENUM_RISK_BASE RiskBase = RISK_BASE_BALANCE;
+input int MaxRiskPerTrade = 2;
+input double MinLotSize = 0.01;
+input double MaxLotSize = 100;
+input int MaxPositions = 10; // Increased default
 
-input string Comment_d = "==========";                             // Additional Settings
-// input int MagicNumber = 0;                                         // Magic number (Replaced by global input)
-input string OrderNote = "";                                       // Comment for orders
-input int Slippage = 5;                                            // Slippage in points
-input int MaxSpread = 50;                                          // Maximum allowed spread to trade, in points
+// SL/TP (Legacy)
+input ENUM_MODE_SL StopLossMode = SL_FIXED;
+input int DefaultStopLoss = 0;
+input int MinStopLoss = 0;
+input int MaxStopLoss = 5000;
+input ENUM_MODE_TP TakeProfitMode = TP_FIXED;
+input int DefaultTakeProfit = 0;
+input int MinTakeProfit = 0;
+input int MaxTakeProfit = 5000;
+
+// Partial Close (Legacy)
+input bool UsePartialClose = false;
+input double PartialClosePerc = 50;
+input double ATRMultiplierPC = 1;
+
+// Additional (Legacy)
+input int Slippage = 5;
 
 
 // Global Variables
@@ -118,9 +127,20 @@ int IndicatorHandle = -1; // Global indicator handle for the EA's main signal in
 double ATR_current, ATR_previous; // ATR values.
 double Indicator_current, Indicator_previous; // Indicator values.
 
+// Backward Compatibility Mappings (Temporary until refactor)
+double LotSize = InpLotSize;
+long MagicNumber = InpMagicNumber;
+int MA_Period = 14;
+int DelayMinutes = 0;
+int MaxOpenTrades = InpMaxTrades;
+double TakeProfitUSD = InpMinProfit;
+string OrderNote = InpComment;
+int MaxSpread = (int)InpMaxSpreadPoints;
+
 enum PendingSignal { PENDING_NONE, PENDING_BUY, PENDING_SELL };
 PendingSignal pending = PENDING_NONE;
 datetime pendingSince = 0;
+int pendingDelay = 0;
 
 // Here go all the event handling functions. They all run on specific events generated for the expert advisor.
 // All event handlers are optional and can be removed if you don't need to process that specific event.
@@ -131,6 +151,7 @@ datetime pendingSince = 0;
 //+-------------------------------------------------------------------+
 int OnInit()
 {
+    MathSrand(GetTickCount()); // Seed random number generator
     // EventSetTimer(60); // Starting a 60-second timer.
     // EventSetMillisecondTimer(500); // Starting a 500-millisecond timer.
 
@@ -213,105 +234,216 @@ double OnTester()
 
 // Here go all custom functions. They all are called either from the above-defined event handlers or from other custom functions.
 
+// Helper to get rates safely
+bool GetRates(string symbol, ENUM_TIMEFRAMES timeframe, int count, MqlRates &rates[])
+{
+   ArraySetAsSeries(rates, true);
+   int copied = CopyRates(symbol, timeframe, 0, count, rates);
+   if (copied != count)
+   {
+      PrintFormat("Error CopyRates: Copied %d/%d. Error: %d", copied, count, GetLastError());
+      return false;
+   }
+   return true;
+}
+
+// Task 4: Time Filter (Start Gate)
+bool CheckGate()
+{
+   if (!InpEnableSundayGate) return true;
+
+   MqlDateTime dt;
+   TimeCurrent(dt);
+
+   // Calculate minutes from start of the week (Sunday 00:00)
+   long currentMinutes = dt.day_of_week * 1440 + dt.hour * 60 + dt.min;
+   long gateMinutes = InpGateDay * 1440 + InpGateHour * 60 + InpGateMinute;
+
+   if (currentMinutes < gateMinutes)
+   {
+       // Gate Closed
+       PrintFormat("Gate CLOSED. Current: %s (Day %d) < Gate: Day %d %02d:%02d",
+           TimeToString(TimeCurrent()), dt.day_of_week, InpGateDay, InpGateHour, InpGateMinute);
+       return false;
+   }
+
+   // Gate Open
+   return true;
+}
+
+// Task 5: Get MA Value
+double GetMA()
+{
+    double buf[1];
+    if (CopyBuffer(IndicatorHandle, 0, 0, 1, buf) != 1) return 0.0;
+    return buf[0];
+}
+
 // Entry and exit processing
 void ProcessTick()
 {
+    // Ensure Indicators are updated (ATR)
+    if (!GetIndicatorsData()) return;
+
     // Check for New Bar
     if (IsNewBar())
     {
-        Print("NEW BAR: ", TimeToString(iTime(Symbol(), Period(), 0)));
+        Print("NEW BAR: ", TimeToString(TimeCurrent()));
 
-        double ma_buf[3];
-        ArraySetAsSeries(ma_buf, true);
-        if (CopyBuffer(IndicatorHandle, 0, 0, 3, ma_buf) == 3)
+        // Task 3: Rates Verification (Need Rates for subsequent steps)
+        MqlRates rates[];
+        if (!GetRates(Symbol(), Period(), InpTrendPeriod + 5, rates)) return;
+
+        // Task 4: Gate Check
+        bool gateOpen = CheckGate();
+
+        // Task 5: MA Filter
+        double maValue = GetMA();
+        if (maValue == 0.0)
         {
-             double ma0 = ma_buf[0];
-             double ma1 = ma_buf[1];
-             double ma2 = ma_buf[2];
-
-             double slope_now = ma0 - ma1;
-             double slope_prev = ma1 - ma2;
-
-             PrintFormat("MA: %.5f/%.5f/%.5f | Slope: Now=%.5f Prev=%.5f", ma0, ma1, ma2, slope_now, slope_prev);
-
-             // Turn Detection
-             if (slope_prev < 0 && slope_now > 0)
-             {
-                 pending = PENDING_BUY;
-                 pendingSince = TimeCurrent();
-                 Print("TURN detected -> PENDING BUY started at ", TimeToString(pendingSince));
-             }
-             else if (slope_prev > 0 && slope_now < 0)
-             {
-                 pending = PENDING_SELL;
-                 pendingSince = TimeCurrent();
-                 Print("TURN detected -> PENDING SELL started at ", TimeToString(pendingSince));
-             }
-
-             // Task 6: Log Max Open Trades
-             int openCount = CountPositions();
-             PrintFormat("Open Positions: %d | Max: %d", openCount, MaxOpenTrades);
-
-             // Task 7: Execution Logic
-             if (pending != PENDING_NONE)
-             {
-                 // Check delay (real time)
-                 if (TimeCurrent() - pendingSince >= DelayMinutes * 60)
-                 {
-                     bool confirm = false;
-                     if (pending == PENDING_BUY && slope_now > 0) confirm = true;
-                     if (pending == PENDING_SELL && slope_now < 0) confirm = true;
-
-                     if (confirm)
-                     {
-                         if (openCount < MaxOpenTrades)
-                         {
-                             bool result = false;
-                             if (pending == PENDING_BUY)
-                                 result = Trade.Buy(LotSize, Symbol(), 0, 0, 0, "MA_TURN_EA");
-                             else
-                                 result = Trade.Sell(LotSize, Symbol(), 0, 0, 0, "MA_TURN_EA");
-
-                             if (result)
-                             {
-                                 Print("Pending executed successfully.");
-                                 pending = PENDING_NONE;
-                             }
-                             else
-                             {
-                                 Print("Order execution failed: ", Trade.ResultRetcodeDescription());
-                             }
-                         }
-                         else
-                         {
-                             Print("Max trades reached. Pending retained.");
-                         }
-                     }
-                     else
-                     {
-                         Print("Pending execution failed confirmation (slope lost/reversed). Pending cancelled.");
-                         pending = PENDING_NONE;
-                     }
-                 }
-             }
+            Print("Error: MA Value is 0.0 (Data missing). Skipping signal.");
+            return;
         }
-        else
+
+        double price = rates[0].close;
+        int allowedDir = 0; // 0=None, 1=Buy, -1=Sell
+
+        if (price < maValue) allowedDir = 1;
+        else if (price > maValue) allowedDir = -1;
+
+        // Task 6: Trend Confirmation (Body Sum of last InpTrendPeriod closed candles)
+        double bodySum = 0;
+        for (int i = 1; i <= InpTrendPeriod; i++)
         {
-             Print("Error copying MA buffer: ", GetLastError());
+            if (i < ArraySize(rates))
+               bodySum += (rates[i].close - rates[i].open);
+        }
+
+        bool trendPass = false;
+        if (allowedDir == 1 && bodySum > 0) trendPass = true;
+        if (allowedDir == -1 && bodySum < 0) trendPass = true;
+
+        PrintFormat("Filter Summary: Gate=%s | Price=%.5f MA=%.5f | Dir=%d | BodySum=%.5f Trend=%s",
+            gateOpen ? "OPEN" : "CLOSED", price, maValue, allowedDir, bodySum, trendPass ? "PASS" : "FAIL");
+
+        // Task 7: Reversal Candle Detection
+        if (gateOpen && trendPass)
+        {
+            // Buy Signal: Dip Buy (Price < MA) -> Trend Up (BodySum > 0) -> Turn (Bearish then Bullish)
+            if (allowedDir == 1)
+            {
+                // Check if Candle 1 is Bullish and Candle 2 was Bearish
+                if (rates[1].close > rates[1].open && rates[2].close < rates[2].open)
+                {
+                    pending = PENDING_BUY;
+                    pendingSince = TimeCurrent();
+                    // Task 8: Delay calculation (0 to InpDelaySeconds)
+                    pendingDelay = (int)(MathRand() % (InpDelaySeconds + 1));
+                    PrintFormat("SIGNAL: BUY Reversal Detected. Pending in %d sec.", pendingDelay);
+                }
+            }
+            // Sell Signal: Rally Sell (Price > MA) -> Trend Down (BodySum < 0) -> Turn (Bullish then Bearish)
+            else if (allowedDir == -1)
+            {
+                 if (rates[1].close < rates[1].open && rates[2].close > rates[2].open)
+                 {
+                     pending = PENDING_SELL;
+                     pendingSince = TimeCurrent();
+                     pendingDelay = (int)(MathRand() % (InpDelaySeconds + 1));
+                     PrintFormat("SIGNAL: SELL Reversal Detected. Pending in %d sec.", pendingDelay);
+                 }
+            }
         }
     }
 
-    if (!GetIndicatorsData()) return;
+    // Task 8: Process Pending Execution
+    if (pending != PENDING_NONE)
+    {
+        long elapsed = TimeCurrent() - pendingSince;
+        if (elapsed >= pendingDelay)
+        {
+            PrintFormat("Pending Delay (%d sec) elapsed. Executing Trade...", pendingDelay);
+            ExecuteTrades();
+            pending = PENDING_NONE;
+        }
+    }
 
+    // Existing Management Logic (To be refactored later)
     if (CountPositions())
     {
-        // There is a position open. Manage SL, TP, or close if necessary.
-        if (UsePartialClose) PartialCloseAll();
         CheckExitSignal();
     }
+}
 
-    // The number is recalculated after the first call because some trades could have been gotten closed.
-    if (CountPositions() < MaxPositions) CheckEntrySignal(); // Check entry signals only if there aren't too many positions already.
+// Task 9/10: Execution Logic
+void ExecuteTrades()
+{
+    // Task 12: Spread Filter
+    if (InpMaxSpreadPoints > 0)
+    {
+        long spread = SymbolInfoInteger(Symbol(), SYMBOL_SPREAD);
+        if (spread > InpMaxSpreadPoints)
+        {
+            PrintFormat("Execution Blocked by Spread: %d > %.0f", spread, InpMaxSpreadPoints);
+            return;
+        }
+    }
+
+    // Recalculate BodySum (Trend Strength)
+    MqlRates rates[];
+    if (!GetRates(Symbol(), Period(), InpTrendPeriod + 1, rates)) return;
+
+    double bodySum = 0;
+    for (int i = 1; i <= InpTrendPeriod; i++)
+    {
+         if (i < ArraySize(rates))
+             bodySum += (rates[i].close - rates[i].open);
+    }
+
+    double avgBody = MathAbs(bodySum) / InpTrendPeriod;
+
+    // Normalize with ATR
+    double atr = ATR_previous;
+    if (atr <= 0) atr = SymbolInfoDouble(Symbol(), SYMBOL_POINT) * 10; // Fallback
+
+    double score = avgBody / atr;
+
+    // Map Score (e.g. 0.2 to 1.0) to Trades
+    double minScore = 0.2;
+    double maxScore = 1.0;
+
+    double factor = (score - minScore) / (maxScore - minScore);
+    if (factor < 0) factor = 0;
+    if (factor > 1) factor = 1;
+
+    int tradeCount = (int)(InpMinTrades + factor * (InpMaxTrades - InpMinTrades));
+
+    PrintFormat("Analysis: BodySum=%.5f Avg=%.5f ATR=%.5f Score=%.2f -> Trades: %d",
+        bodySum, avgBody, atr, score, tradeCount);
+
+    // Execute Loop
+    int currentOpen = CountPositions();
+    int limit = MaxPositions; // Global limit
+
+    int opened = 0;
+    for (int i = 0; i < tradeCount; i++)
+    {
+        if (currentOpen + opened >= limit)
+        {
+            Print("Max Global Positions reached. Stopping batch.");
+            break;
+        }
+
+        bool res = false;
+        if (pending == PENDING_BUY)
+             res = Trade.Buy(InpLotSize, Symbol(), 0, 0, 0, InpComment);
+        else if (pending == PENDING_SELL)
+             res = Trade.Sell(InpLotSize, Symbol(), 0, 0, 0, InpComment);
+
+        if (res) opened++;
+        else Print("Order failed: ", Trade.ResultRetcodeDescription());
+    }
+    PrintFormat("Batch Finished. Opened %d/%d trades.", opened, tradeCount);
 }
 
 int CountPositions()
@@ -341,7 +473,8 @@ int CountPositions()
 bool InitializeHandles()
 {
     // Indicator handle is the main handle for the signal generating indicator.
-    IndicatorHandle = iMA(Symbol(), Period(), MA_Period, 0, MA_Method, PRICE_CLOSE);
+    // Task 5: 7-Hour MA Filter (H1 Timeframe, InpMAHours period)
+    IndicatorHandle = iMA(Symbol(), PERIOD_H1, InpMAHours, 0, MODE_SMA, PRICE_CLOSE);
     if (IndicatorHandle == INVALID_HANDLE)
     {
         PrintFormat("Unable to create main indicator handle - %s - %d.", GetLastErrorText(GetLastError()), GetLastError());
@@ -751,11 +884,27 @@ void CheckExitSignal()
         if(symbol == Symbol() && PositionGetInteger(POSITION_MAGIC) == MagicNumber)
         {
             double profit = PositionGetDouble(POSITION_PROFIT);
-            // Check if profit >= TakeProfitUSD
-            if(profit >= TakeProfitUSD)
+            long openTime = (long)PositionGetInteger(POSITION_TIME);
+            long elapsed = TimeCurrent() - openTime;
+
+            // Task 11: Dynamic Take Profit
+            // If trade is young (high momentum/volatility expectation), aim for MaxProfit.
+            // If trade stalls (elapsed > Time), accept MinProfit.
+            double target = InpMinProfit;
+            string type = "Slow/Min";
+
+            if (elapsed < InpMomentumTime)
+            {
+                target = InpMaxProfit;
+                type = "Fast/Max";
+            }
+
+            if(profit >= target)
             {
                 ulong ticket = PositionGetInteger(POSITION_TICKET);
-                PrintFormat("TPUSD hit for ticket %d: Profit=%.2f >= Target=%.2f", ticket, profit, TakeProfitUSD);
+                PrintFormat("Dynamic TP Hit (%s): Ticket %d | Profit=%.2f >= Target=%.2f (Elapsed %d sec)",
+                    type, ticket, profit, target, elapsed);
+
                 if(Trade.PositionClose(ticket))
                 {
                     Print("Position closed successfully.");
