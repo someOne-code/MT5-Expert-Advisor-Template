@@ -275,7 +275,11 @@ bool CheckGate()
 double GetMA()
 {
     double buf[1];
-    if (CopyBuffer(IndicatorHandle, 0, 0, 1, buf) != 1) return 0.0;
+    if (CopyBuffer(IndicatorHandle, 0, 0, 1, buf) != 1)
+    {
+        PrintFormat("Error getting MA: %d", GetLastError());
+        return -1.0; // Return error code
+    }
     return buf[0];
 }
 
@@ -299,9 +303,9 @@ void ProcessTick()
 
         // Task 5: MA Filter
         double maValue = GetMA();
-        if (maValue == 0.0)
+        if (maValue < 0.0) // Check for error code
         {
-            Print("Error: MA Value is 0.0 (Data missing). Skipping signal.");
+            Print("Error: MA Calculation Failed. Skipping signal.");
             return;
         }
 
@@ -329,17 +333,15 @@ void ProcessTick()
         // Task 7: Reversal Candle Detection
         if (gateOpen && trendPass)
         {
+            PendingSignal newPending = PENDING_NONE;
+
             // Buy Signal: Dip Buy (Price < MA) -> Trend Up (BodySum > 0) -> Turn (Bearish then Bullish)
             if (allowedDir == 1)
             {
                 // Check if Candle 1 is Bullish and Candle 2 was Bearish
                 if (rates[1].close > rates[1].open && rates[2].close < rates[2].open)
                 {
-                    pending = PENDING_BUY;
-                    pendingSince = TimeCurrent();
-                    // Task 8: Delay calculation (0 to InpDelaySeconds)
-                    pendingDelay = (int)(MathRand() % (InpDelaySeconds + 1));
-                    PrintFormat("SIGNAL: BUY Reversal Detected. Pending in %d sec.", pendingDelay);
+                    newPending = PENDING_BUY;
                 }
             }
             // Sell Signal: Rally Sell (Price > MA) -> Trend Down (BodySum < 0) -> Turn (Bullish then Bearish)
@@ -347,11 +349,22 @@ void ProcessTick()
             {
                  if (rates[1].close < rates[1].open && rates[2].close > rates[2].open)
                  {
-                     pending = PENDING_SELL;
-                     pendingSince = TimeCurrent();
-                     pendingDelay = (int)(MathRand() % (InpDelaySeconds + 1));
-                     PrintFormat("SIGNAL: SELL Reversal Detected. Pending in %d sec.", pendingDelay);
+                     newPending = PENDING_SELL;
                  }
+            }
+
+            if (newPending != PENDING_NONE)
+            {
+                if (pending != PENDING_NONE)
+                {
+                    PrintFormat("WARNING: Pending Signal OVERWRITE! Old: %d New: %d", pending, newPending);
+                }
+
+                pending = newPending;
+                pendingSince = TimeCurrent();
+                pendingDelay = (int)(MathRand() % (InpDelaySeconds + 1));
+                PrintFormat("SIGNAL: %s Reversal Detected. Pending in %d sec.",
+                    pending == PENDING_BUY ? "BUY" : "SELL", pendingDelay);
             }
         }
     }
@@ -404,7 +417,11 @@ void ExecuteTrades()
 
     // Normalize with ATR
     double atr = ATR_previous;
-    if (atr <= 0) atr = SymbolInfoDouble(Symbol(), SYMBOL_POINT) * 10; // Fallback
+    if (atr <= 0)
+    {
+        atr = SymbolInfoDouble(Symbol(), SYMBOL_POINT) * 10; // Fallback
+        Print("WARNING: ATR <= 0, using fallback value for trade count calculation.");
+    }
 
     double score = avgBody / atr;
 
@@ -418,7 +435,7 @@ void ExecuteTrades()
 
     int tradeCount = (int)(InpMinTrades + factor * (InpMaxTrades - InpMinTrades));
 
-    PrintFormat("Analysis: BodySum=%.5f Avg=%.5f ATR=%.5f Score=%.2f -> Trades: %d",
+    PrintFormat("[TRADE_CALC] BodySum=%.5f Avg=%.5f ATR=%.5f Score=%.2f -> Trades: %d",
         bodySum, avgBody, atr, score, tradeCount);
 
     // Execute Loop
