@@ -234,17 +234,28 @@ double OnTester()
 
 // Here go all custom functions. They all are called either from the above-defined event handlers or from other custom functions.
 
-// Helper to get rates safely
+// Helper to get rates safely with retry
 bool GetRates(string symbol, ENUM_TIMEFRAMES timeframe, int count, MqlRates &rates[])
 {
    ArraySetAsSeries(rates, true);
-   int copied = CopyRates(symbol, timeframe, 0, count, rates);
-   if (copied != count)
+
+   for (int attempt = 0; attempt < 5; attempt++) // Retry loop
    {
-      PrintFormat("Error CopyRates: Copied %d/%d. Error: %d", copied, count, GetLastError());
-      return false;
+       int copied = CopyRates(symbol, timeframe, 0, count, rates);
+       if (copied == count) return true;
+
+       if (GetLastError() == 4401) // History not found/not ready
+       {
+           PrintFormat("History not ready (%s, %d). Attempt %d...", symbol, timeframe, attempt + 1);
+           Sleep(100);
+           continue;
+       }
+
+       PrintFormat("Error CopyRates (%d/%d): %d", copied, count, GetLastError());
+       return false;
    }
-   return true;
+
+   return false;
 }
 
 // Task 4: Time Filter (Start Gate)
@@ -271,24 +282,36 @@ bool CheckGate()
    return true;
 }
 
-// Task 5: Get MA Value
+// Task 5: Get MA Value with retry
 double GetMA()
 {
     double buf[1];
-    if (CopyBuffer(IndicatorHandle, 0, 0, 1, buf) != 1)
+    for (int attempt = 0; attempt < 3; attempt++)
     {
-        PrintFormat("Error getting MA: %d", GetLastError());
-        return -1.0; // Return error code
+        if (CopyBuffer(IndicatorHandle, 0, 0, 1, buf) == 1) return buf[0];
+        if (GetLastError() == 4806 || GetLastError() == 4807) // No data yet
+        {
+             Sleep(50);
+             continue;
+        }
+        break;
     }
+
+    PrintFormat("Error getting MA: %d", GetLastError());
+    return -1.0; // Return error code
+}
+
+// Helper: Get ATR Value Robustly
+double GetATR()
+{
+    double buf[1];
+    if (CopyBuffer(ATRHandle, 0, 0, 1, buf) != 1) return -1.0;
     return buf[0];
 }
 
 // Entry and exit processing
 void ProcessTick()
 {
-    // Ensure Indicators are updated (ATR)
-    if (!GetIndicatorsData()) return;
-
     // Check for New Bar
     if (IsNewBar())
     {
@@ -416,12 +439,12 @@ void ExecuteTrades()
 
     double avgBody = MathAbs(bodySum) / InpTrendPeriod;
 
-    // Normalize with ATR
-    double atr = ATR_previous;
-    if (atr <= 0)
+    // Task 18: Robust ATR Usage
+    double atr = GetATR(); // Use the robust helper
+    if (atr <= 0.0)
     {
-        atr = SymbolInfoDouble(Symbol(), SYMBOL_POINT) * 10; // Fallback
-        Print("WARNING: ATR <= 0, using fallback value for trade count calculation.");
+        PrintFormat("Error: Invalid ATR (%.5f) for volatility calculation. Skipping trade.", atr);
+        return; // Fail-safe: Do not trade without valid volatility data
     }
 
     double score = avgBody / atr;
@@ -940,14 +963,17 @@ void CheckExitSignal()
 // Dynamic stop-loss calculation
 double DynamicStopLossPrice(ENUM_ORDER_TYPE type, double open_price)
 {
+    double atr = GetATR();
+    if (atr <= 0) atr = SymbolInfoDouble(Symbol(), SYMBOL_POINT) * 100; // Fallback for SL calc only
+
     double StopLossPrice = 0;
     if (type == ORDER_TYPE_BUY)
     {
-        StopLossPrice = open_price - ATR_previous * ATRMultiplierSL;
+        StopLossPrice = open_price - atr * ATRMultiplierSL;
     }
     else if (type == ORDER_TYPE_SELL)
     {
-        StopLossPrice = open_price + ATR_previous * ATRMultiplierSL;
+        StopLossPrice = open_price + atr * ATRMultiplierSL;
     }
     return NormalizeDouble(StopLossPrice, (int)SymbolInfoInteger(Symbol(), SYMBOL_DIGITS));
 }
@@ -955,14 +981,17 @@ double DynamicStopLossPrice(ENUM_ORDER_TYPE type, double open_price)
 // Dynamic take-profit calculation
 double DynamicTakeProfitPrice(ENUM_ORDER_TYPE type, double open_price)
 {
+    double atr = GetATR();
+    if (atr <= 0) atr = SymbolInfoDouble(Symbol(), SYMBOL_POINT) * 100;
+
     double TakeProfitPrice = 0;
     if (type == ORDER_TYPE_BUY)
     {
-        TakeProfitPrice = open_price + ATR_previous * ATRMultiplierTP;
+        TakeProfitPrice = open_price + atr * ATRMultiplierTP;
     }
     else if (type == ORDER_TYPE_SELL)
     {
-        TakeProfitPrice = open_price - ATR_previous * ATRMultiplierTP;
+        TakeProfitPrice = open_price - atr * ATRMultiplierTP;
     }
     return NormalizeDouble(TakeProfitPrice, (int)SymbolInfoInteger(Symbol(), SYMBOL_DIGITS));
 }
