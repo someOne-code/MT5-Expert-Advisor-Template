@@ -16,12 +16,12 @@ input double InpLotSize        = 0.01; // Islem Hacmi (Lot)
 input int    InpMAHours        = 7;    // Hareketli Ortalama Saati (7)
 input int    InpTrendPeriod    = 25;   // Trend Teyidi Mum Sayisi (25)
 input int    InpDelaySeconds   = 20;   // Maksimum Giris Gecikmesi (Saniye)
-input double InpMinProfitUSD   = 10.0; // Minimum Kar (USD)
-input double InpMaxProfitUSD   = 50.0; // Maksimum Kar (USD)
+input double InpMinProfitUSD   = 1.5;  // Minimum Kar (USD) (Orn: 0.01 lot icin 150 puan)
+input double InpMaxProfitUSD   = 3.0;  // Maksimum Kar (USD) (Orn: 0.01 lot icin 300 puan)
 input int    InpMinTrades      = 2;    // Min Islem Adedi
 input int    InpMaxTrades      = 7;    // Max Islem Adedi
-input int    InpMomentumTime   = 60;   // Momentum Zaman Siniri (Saniye)
-input double InpMaxSpreadPoints= 0;    // Max Spread (Puan, 0=Devre Disi)
+input int    InpMomentumTime   = 300;  // Momentum Zaman Siniri (Saniye) (Default: 5 dk)
+input double InpMaxSpreadPoints= 20;   // Max Spread (Puan, 0=Devre Disi) (Default: 20)
 input int    InpMaxOpenPositions = 1;  // Global Maksimum Acik Pozisyon (Default: 1)
 input int    InpMaxTradeHours  = 24;   // Zaman Asimi (Saat) - 24s sonra karda degilse kapat
 
@@ -154,6 +154,9 @@ void CheckExits()
         ulong ticket = PositionGetTicket(i);
         if (ticket <= 0) continue;
 
+        // Task 21: Harden Selection (Ensure ticket is valid before property access)
+        if (!PositionSelectByTicket(ticket)) continue;
+
         // Filter by Symbol and Magic
         if (PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
         if (PositionGetInteger(POSITION_MAGIC) != InpMagicNumber) continue;
@@ -247,9 +250,9 @@ void ExecuteTrades(int direction)
         int totalPos = PositionsTotal();
         for(int j=0; j<totalPos; j++)
         {
-             // Use SelectByIndex to check properties safely
+             // Task 21: Harden Selection (Ensure ticket is valid)
              ulong ticket = PositionGetTicket(j);
-             if (ticket > 0)
+             if (ticket > 0 && PositionSelectByTicket(ticket))
              {
                  if (PositionGetString(POSITION_SYMBOL) == Symbol() &&
                      PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
