@@ -16,12 +16,14 @@ input double InpLotSize        = 0.01; // Islem Hacmi (Lot)
 input int    InpMAHours        = 7;    // Hareketli Ortalama Saati (7)
 input int    InpTrendPeriod    = 25;   // Trend Teyidi Mum Sayisi (25)
 input int    InpDelaySeconds   = 20;   // Maksimum Giris Gecikmesi (Saniye)
-input double InpMinProfit      = 10.0; // Minimum Kar (Yavas Hedef)
-input double InpMaxProfit      = 50.0; // Maksimum Kar (Hizli Hedef)
+input double InpMinProfitUSD   = 10.0; // Minimum Kar (USD)
+input double InpMaxProfitUSD   = 50.0; // Maksimum Kar (USD)
 input int    InpMinTrades      = 2;    // Min Islem Adedi
 input int    InpMaxTrades      = 7;    // Max Islem Adedi
 input int    InpMomentumTime   = 60;   // Momentum Zaman Siniri (Saniye)
 input double InpMaxSpreadPoints= 0;    // Max Spread (Puan, 0=Devre Disi)
+input int    InpMaxOpenPositions = 1;  // Global Maksimum Acik Pozisyon (Default: 1)
+input int    InpMaxTradeHours  = 24;   // Zaman Asimi (Saat) - 24s sonra karda degilse kapat
 
 input group "Zaman Ayarlari (Gate)"
 input bool   InpEnableSundayGate = false;// Pazar Gate Aktif Et
@@ -96,18 +98,26 @@ int GetTradeCount(const MqlRates &rates[], int trendPeriod)
 {
     if (ExtHandleATR == INVALID_HANDLE) return InpMinTrades;
 
+    // Task 18: Correct Average Body Calculation (Robust)
     // 1. Calculate Average Body Size of recent Trend Period
     double totalBody = 0;
+    int usedBars = 0;
     for(int i=1; i<=trendPeriod; i++)
     {
        if(i >= ArraySize(rates)) break;
        totalBody += MathAbs(rates[i].close - rates[i].open);
+       usedBars++;
     }
-    double avgBody = totalBody / trendPeriod;
+
+    // Prevent division by zero
+    if (usedBars == 0) return InpMinTrades;
+
+    double avgBody = totalBody / usedBars;
 
     // 2. Get ATR
     double atrBuf[1];
-    if (CopyBuffer(ExtHandleATR, 0, 0, 1, atrBuf) != 1) return InpMinTrades;
+    // Task 17: Shift 1 (Completed Bar) to prevent repaint
+    if (CopyBuffer(ExtHandleATR, 0, 1, 1, atrBuf) != 1) return InpMinTrades;
     double atr = atrBuf[0];
 
     if (atr <= 0) return InpMinTrades; // Prevent division by zero
@@ -153,19 +163,30 @@ void CheckExits()
         long   openTime = PositionGetInteger(POSITION_TIME);
         long   elapsed  = TimeCurrent() - openTime;
 
-        double target = InpMinProfit; // Default Slow Target
+        // Task 16: Time Stop (Zaman Asimi)
+        // If elapsed > X hours, force close (Stale Trade Protection)
+        if (elapsed > InpMaxTradeHours * 3600)
+        {
+             PrintFormat("Zaman Asimi (Time Stop): %d saat gecti. Kar: %.2f USD. Kapatiliyor...",
+                 InpMaxTradeHours, profit);
+             Trade.PositionClose(ticket);
+             continue;
+        }
+
+        // Task 15: USD Targets
+        double target = InpMinProfitUSD; // Default Slow Target (USD)
         string type   = "Yavas/Min";
 
         // If trade is young (high momentum), aim for MaxProfit
         if (elapsed < InpMomentumTime)
         {
-            target = InpMaxProfit;
+            target = InpMaxProfitUSD;
             type   = "Hizli/Max";
         }
 
         if (profit >= target)
         {
-            PrintFormat("Dinamik Kar Al (%s): Ticket %d | Kar=%.2f >= Hedef=%.2f (Sure: %d sn)",
+            PrintFormat("Dinamik Kar Al (%s): Ticket %d | Kar=%.2f USD >= Hedef=%.2f USD (Sure: %d sn)",
                 type, ticket, profit, target, elapsed);
 
             if (Trade.PositionClose(ticket))
@@ -209,6 +230,30 @@ void ExecuteTrades(int direction)
     int opened = 0;
     for(int i=0; i<count; i++)
     {
+        // Task 14: Global Position Limit Check
+        int currentTotal = 0;
+        int totalPos = PositionsTotal();
+        for(int j=0; j<totalPos; j++)
+        {
+             // Use SelectByIndex to check properties safely
+             ulong ticket = PositionGetTicket(j);
+             if (ticket > 0)
+             {
+                 if (PositionGetString(POSITION_SYMBOL) == Symbol() &&
+                     PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
+                 {
+                     currentTotal++;
+                 }
+             }
+        }
+
+        if (currentTotal >= InpMaxOpenPositions)
+        {
+            PrintFormat("Maksimum Islem Limiti Doldu (%d/%d). Yeni emir iptal: %s",
+                currentTotal, InpMaxOpenPositions, (direction==1)?"BUY":"SELL");
+            break; // Stop sending more orders in this batch
+        }
+
         bool res = false;
 
         // No SL/TP initially (Dynamic Exit will handle it)
@@ -295,7 +340,8 @@ double GetMA()
    int attempts = 3;
    for(int i=0; i<attempts; i++)
    {
-       if (CopyBuffer(ExtHandleMA, 0, 0, 1, buf) == 1)
+       // Task 17: Shift 1 (Completed Bar) to prevent repaint
+       if (CopyBuffer(ExtHandleMA, 0, 1, 1, buf) == 1)
            return buf[0];
 
        int err = GetLastError();
