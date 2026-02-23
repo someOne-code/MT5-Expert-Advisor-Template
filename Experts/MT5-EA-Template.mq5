@@ -163,14 +163,26 @@ void CheckExits()
         long   openTime = PositionGetInteger(POSITION_TIME);
         long   elapsed  = TimeCurrent() - openTime;
 
-        // Task 16: Time Stop (Zaman Asimi)
-        // If elapsed > X hours, force close (Stale Trade Protection)
-        if (elapsed > InpMaxTradeHours * 3600)
+        // Task 16: Time Stop (Zaman Asimi) - Stale Losing Trades Only
+        if (InpMaxTradeHours > 0 && elapsed > InpMaxTradeHours * 3600)
         {
-             PrintFormat("Zaman Asimi (Time Stop): %d saat gecti. Kar: %.2f USD. Kapatiliyor...",
-                 InpMaxTradeHours, profit);
-             Trade.PositionClose(ticket);
-             continue;
+             // Only close if not in profit (stale & losing)
+             if (profit < 0)
+             {
+                 PrintFormat("Zaman Asimi (Time Stop): %d saat gecti. Kar: %.2f USD. Kapatiliyor...",
+                     InpMaxTradeHours, profit);
+
+                 if (!Trade.PositionClose(ticket))
+                 {
+                     PrintFormat("Hata: Zaman asimi kapatilamadi (Ticket: %d). Kod: %d - %s",
+                         ticket, Trade.ResultRetcode(), Trade.ResultRetcodeDescription());
+                 }
+                 else
+                 {
+                     Print("Zaman Asimi ile kapatildi.");
+                 }
+                 continue; // Trade closed or failed, skip to next check
+             }
         }
 
         // Task 15: USD Targets
