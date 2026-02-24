@@ -12,6 +12,7 @@
 
 //-INPUTS-//
 input group "Strateji Ayarlari"
+input int    InpStopLossPips   = 150;  // Zarar Kes (Pip)
 input double InpLotSize        = 0.01; // Islem Hacmi (Lot)
 input int    InpMAHours        = 7;    // Hareketli Ortalama Saati (7)
 input int    InpTrendPeriod    = 25;   // Trend Teyidi Mum Sayisi (25)
@@ -271,11 +272,22 @@ void ExecuteTrades(int direction)
 
         bool res = false;
 
-        // No SL/TP initially (Dynamic Exit will handle it)
+        // Calculate SL/TP
+        double point = SymbolInfoDouble(Symbol(), SYMBOL_POINT);
+        double sl = 0.0;
+
         if (direction == 1) // BUY
-            res = Trade.Buy(InpLotSize, Symbol(), 0, 0, 0, InpComment);
+        {
+            double ask = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
+            sl = NormalizeDouble(ask - InpStopLossPips * point, _Digits);
+            res = Trade.Buy(InpLotSize, Symbol(), ask, sl, 0, InpComment);
+        }
         else if (direction == -1) // SELL
-            res = Trade.Sell(InpLotSize, Symbol(), 0, 0, 0, InpComment);
+        {
+            double bid = SymbolInfoDouble(Symbol(), SYMBOL_BID);
+            sl = NormalizeDouble(bid + InpStopLossPips * point, _Digits);
+            res = Trade.Sell(InpLotSize, Symbol(), bid, sl, 0, InpComment);
+        }
 
         if (res)
         {
