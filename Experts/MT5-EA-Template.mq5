@@ -17,8 +17,8 @@ input double InpLotSize        = 0.01; // Islem Hacmi (Lot)
 input int    InpMAHours        = 7;    // Hareketli Ortalama Saati (7)
 input int    InpTrendPeriod    = 25;   // Trend Teyidi Mum Sayisi (25)
 input int    InpDelaySeconds   = 20;   // Maksimum Giris Gecikmesi (Saniye)
-input double InpMinProfitUSD   = 1.5;  // Minimum Kar (USD) (Orn: 0.01 lot icin 150 puan)
-input double InpMaxProfitUSD   = 3.0;  // Maksimum Kar (USD) (Orn: 0.01 lot icin 300 puan)
+input int    InpMinProfitPoints= 150;  // Minimum Kar (Puan / Point)
+input int    InpMaxProfitPoints= 300;  // Maksimum Kar (Puan / Point)
 input int    InpMinTrades      = 2;    // Min Islem Adedi
 input int    InpMaxTrades      = 7;    // Max Islem Adedi
 input int    InpMomentumTime   = 300;  // Momentum Zaman Siniri (Saniye) (Default: 5 dk)
@@ -162,19 +162,37 @@ void CheckExits()
         if (PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
         if (PositionGetInteger(POSITION_MAGIC) != InpMagicNumber) continue;
 
-        // Check Profit & Time
-        double profit   = PositionGetDouble(POSITION_PROFIT);
-        long   openTime = PositionGetInteger(POSITION_TIME);
-        long   elapsed  = TimeCurrent() - openTime;
+        // Get Position Details for Point Calculation
+        double profitUSD = PositionGetDouble(POSITION_PROFIT);
+        long   openTime  = PositionGetInteger(POSITION_TIME);
+        long   elapsed   = TimeCurrent() - openTime;
+
+        long   posType   = PositionGetInteger(POSITION_TYPE);
+        double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+        double currPrice = PositionGetDouble(POSITION_PRICE_CURRENT);
+        double point     = SymbolInfoDouble(Symbol(), SYMBOL_POINT);
+
+        if (point <= 0) continue; // Prevent division by zero
+
+        // Calculate Profit in Points
+        double profitPoints = 0;
+        if (posType == POSITION_TYPE_BUY)
+        {
+            profitPoints = (currPrice - openPrice) / point;
+        }
+        else if (posType == POSITION_TYPE_SELL)
+        {
+            profitPoints = (openPrice - currPrice) / point;
+        }
 
         // Task 16: Time Stop (Zaman Asimi) - Stale Losing Trades Only
         if (InpMaxTradeHours > 0 && elapsed > InpMaxTradeHours * 3600)
         {
              // Only close if not in profit (stale & losing)
-             if (profit < 0)
+             if (profitUSD < 0)
              {
                  PrintFormat("Zaman Asimi (Time Stop): %d saat gecti. Kar: %.2f USD. Kapatiliyor...",
-                     InpMaxTradeHours, profit);
+                     InpMaxTradeHours, profitUSD);
 
                  if (!Trade.PositionClose(ticket))
                  {
@@ -189,21 +207,21 @@ void CheckExits()
              }
         }
 
-        // Task 15: USD Targets
-        double target = InpMinProfitUSD; // Default Slow Target (USD)
-        string type   = "Yavas/Min";
+        // Task 15: Point Targets (Puan / Nokta Hedefleri)
+        double targetPoints = InpMinProfitPoints; // Default Slow Target (Points)
+        string type         = "Yavas/Min";
 
-        // If trade is young (high momentum), aim for MaxProfit
+        // If trade is young (high momentum), aim for MaxProfitPoints
         if (elapsed < InpMomentumTime)
         {
-            target = InpMaxProfitUSD;
-            type   = "Hizli/Max";
+            targetPoints = InpMaxProfitPoints;
+            type         = "Hizli/Max";
         }
 
-        if (profit >= target)
+        if (profitPoints >= targetPoints)
         {
-            PrintFormat("Dinamik Kar Al (%s): Ticket %d | Kar=%.2f USD >= Hedef=%.2f USD (Sure: %d sn)",
-                type, ticket, profit, target, elapsed);
+            PrintFormat("Dinamik Kar Al (%s): Ticket %d | Kar=%.0f Puan >= Hedef=%.0f Puan (Sure: %d sn)",
+                type, ticket, profitPoints, targetPoints, elapsed);
 
             if (Trade.PositionClose(ticket))
             {
