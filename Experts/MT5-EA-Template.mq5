@@ -19,6 +19,8 @@ input int    InpTrendPeriod    = 25;   // Trend Teyidi Mum Sayisi (25)
 input int    InpDelaySeconds   = 20;   // Maksimum Giris Gecikmesi (Saniye)
 input int    InpMinProfitPoints= 150;  // Minimum Kar (Puan / Point)
 input int    InpMaxProfitPoints= 300;  // Maksimum Kar (Puan / Point)
+input int    InpBreakEvenPoints= 100;  // Basa Bas (Break-Even) Aktiflesme Puanı (0=Kapali)
+input int    InpTrailingStep   = 50;   // Takip Eden Zarar-Kes Adimi (Puan)
 input int    InpMinTrades      = 2;    // Min Islem Adedi
 input int    InpMaxTrades      = 7;    // Max Islem Adedi
 input int    InpMomentumTime   = 300;  // Momentum Zaman Siniri (Saniye) (Default: 5 dk)
@@ -176,13 +178,70 @@ void CheckExits()
 
         // Calculate Profit in Points
         double profitPoints = 0;
+        double currentSL = PositionGetDouble(POSITION_SL);
+        double currentTP = PositionGetDouble(POSITION_TP);
+
         if (posType == POSITION_TYPE_BUY)
         {
             profitPoints = (currPrice - openPrice) / point;
+
+            // Trailing Stop (Break-Even) Logic for BUY
+            if (InpBreakEvenPoints > 0 && profitPoints >= InpBreakEvenPoints)
+            {
+                double newSL = NormalizeDouble(currPrice - (InpTrailingStep * point), _Digits);
+                // Only move SL UP for Buy, and ensure it's at least at Break-Even if profit is >= Break-Even
+                double minBreakEvenSL = openPrice + (1 * point); // +1 point just to cover minimal cost
+
+                // If SL is currently 0 or we can secure more profit using trailing
+                if (currentSL == 0.0 || (newSL > currentSL && newSL >= minBreakEvenSL))
+                {
+                    // If we haven't reached break-even SL yet, just set it to Break-Even first
+                    if (currentSL < minBreakEvenSL && newSL > minBreakEvenSL)
+                    {
+                         newSL = minBreakEvenSL;
+                    }
+
+                    if (!Trade.PositionModify(ticket, newSL, currentTP))
+                    {
+                        PrintFormat("Trailing Stop (BUY) Guncelleme Hatasi (Ticket %d): %d", ticket, Trade.ResultRetcode());
+                    }
+                    else
+                    {
+                        PrintFormat("Trailing Stop (BUY) Aktif: Ticket %d | SL = %.5f (Kâr: %.0f Puan)", ticket, newSL, profitPoints);
+                    }
+                }
+            }
         }
         else if (posType == POSITION_TYPE_SELL)
         {
             profitPoints = (openPrice - currPrice) / point;
+
+            // Trailing Stop (Break-Even) Logic for SELL
+            if (InpBreakEvenPoints > 0 && profitPoints >= InpBreakEvenPoints)
+            {
+                double newSL = NormalizeDouble(currPrice + (InpTrailingStep * point), _Digits);
+                // Only move SL DOWN for Sell, and ensure it's at least at Break-Even if profit is >= Break-Even
+                double minBreakEvenSL = openPrice - (1 * point);
+
+                // If SL is currently 0 or we can secure more profit using trailing
+                if (currentSL == 0.0 || (newSL < currentSL && newSL <= minBreakEvenSL))
+                {
+                    // If we haven't reached break-even SL yet, just set it to Break-Even first
+                    if (currentSL > minBreakEvenSL || currentSL == 0.0)
+                    {
+                         if (newSL < minBreakEvenSL) newSL = minBreakEvenSL;
+                    }
+
+                    if (!Trade.PositionModify(ticket, newSL, currentTP))
+                    {
+                        PrintFormat("Trailing Stop (SELL) Guncelleme Hatasi (Ticket %d): %d", ticket, Trade.ResultRetcode());
+                    }
+                    else
+                    {
+                        PrintFormat("Trailing Stop (SELL) Aktif: Ticket %d | SL = %.5f (Kâr: %.0f Puan)", ticket, newSL, profitPoints);
+                    }
+                }
+            }
         }
 
         // Task 16: Time Stop (Zaman Asimi) - Stale Losing Trades Only
