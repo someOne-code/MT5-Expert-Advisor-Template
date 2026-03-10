@@ -12,8 +12,10 @@
 
 //-INPUTS-//
 input group "Strateji Ayarlari"
-input int    InpStopLossPips   = 150;  // Zarar Kes (Pip)
-input double InpLotSize        = 0.01; // Islem Hacmi (Lot)
+input int    InpStopLossPips   = 150;  // Zarar Kes (Pip - Otomatik Point/Pip Cevrimi Icerir)
+input bool   InpUseAutoLot     = false;// Otomatik Lot Kullan (Bakiye % Risk)
+input double InpRiskPercent    = 1.0;  // Riske Edilecek Bakiye Yuzdesi (%)
+input double InpLotSize        = 0.01; // Islem Hacmi (Eger Auto Lot Kapaliysa)
 input int    InpMAHours        = 7;    // Hareketli Ortalama Saati (7)
 input int    InpTrendPeriod    = 25;   // Trend Teyidi Mum Sayisi (25)
 input int    InpDelaySeconds   = 20;   // Maksimum Giris Gecikmesi (Saniye)
@@ -67,6 +69,21 @@ bool IsNewBar()
 }
 
 //+------------------------------------------------------------------+
+//| Helper: Get Pip Value (Point to Pip Multiplier)                  |
+//+------------------------------------------------------------------+
+double GetPipValue()
+{
+   int digits = (int)SymbolInfoInteger(Symbol(), SYMBOL_DIGITS);
+   double point = SymbolInfoDouble(Symbol(), SYMBOL_POINT);
+
+   // 3 or 5 digit brokers (e.g. 1.12345 or 150.123)
+   if (digits == 3 || digits == 5) return point * 10.0;
+
+   // 2 or 4 digit brokers
+   return point;
+}
+
+//+------------------------------------------------------------------+
 //| Helper: Get Rates Safely (Retry Loop)                            |
 //+------------------------------------------------------------------+
 bool GetRates(string symbol, ENUM_TIMEFRAMES timeframe, int count, MqlRates &rates[])
@@ -92,6 +109,47 @@ bool GetRates(string symbol, ENUM_TIMEFRAMES timeframe, int count, MqlRates &rat
    }
 
    return false;
+}
+
+//+------------------------------------------------------------------+
+//| Helper: Calculate Auto Lot Size based on Risk %                  |
+//+------------------------------------------------------------------+
+double CalculateLotSize(double slDistancePips)
+{
+   if (!InpUseAutoLot || slDistancePips <= 0) return InpLotSize;
+
+   double balance     = AccountInfoDouble(ACCOUNT_BALANCE);
+   double riskAmount  = balance * (InpRiskPercent / 100.0);
+
+   // Get tick value (how much 1 lot moves per tick size in account currency)
+   double tickValue   = SymbolInfoDouble(Symbol(), SYMBOL_TRADE_TICK_VALUE);
+   double tickSize    = SymbolInfoDouble(Symbol(), SYMBOL_TRADE_TICK_SIZE);
+   double point       = SymbolInfoDouble(Symbol(), SYMBOL_POINT);
+   double pipValue    = GetPipValue();
+
+   // If tick value or tick size is missing, fallback to fixed lot
+   if (tickValue <= 0 || tickSize <= 0 || point <= 0) return InpLotSize;
+
+   // Risk Amount = Lot * SL_Distance_in_Points * (TickValue / TickSize)
+   double slDistancePoints = slDistancePips * (pipValue / point);
+   double lossPerLot       = slDistancePoints * (tickValue / (tickSize / point));
+
+   if (lossPerLot <= 0) return InpLotSize;
+
+   double calculatedLot = riskAmount / lossPerLot;
+
+   // Normalize Lot Size based on Broker Limits
+   double minLot  = SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_MIN);
+   double maxLot  = SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_MAX);
+   double lotStep = SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_STEP);
+
+   if (lotStep > 0)
+       calculatedLot = MathFloor(calculatedLot / lotStep) * lotStep;
+
+   if (calculatedLot < minLot) calculatedLot = minLot;
+   if (calculatedLot > maxLot) calculatedLot = maxLot;
+
+   return calculatedLot;
 }
 
 //+------------------------------------------------------------------+
@@ -188,26 +246,29 @@ void CheckExits()
             // Trailing Stop (Break-Even) Logic for BUY
             if (InpBreakEvenPoints > 0 && profitPoints >= InpBreakEvenPoints)
             {
-                double newSL = NormalizeDouble(currPrice - (InpTrailingStep * point), _Digits);
-                // Only move SL UP for Buy, and ensure it's at least at Break-Even if profit is >= Break-Even
                 double minBreakEvenSL = openPrice + (1 * point); // +1 point just to cover minimal cost
+                double newSL = NormalizeDouble(currPrice - (InpTrailingStep * point), _Digits);
 
-                // If SL is currently 0 or we can secure more profit using trailing
-                if (currentSL == 0.0 || (newSL > currentSL && newSL >= minBreakEvenSL))
+                // Ensure newSL is AT LEAST at Break-Even
+                if (newSL < minBreakEvenSL)
                 {
-                    // If we haven't reached break-even SL yet, just set it to Break-Even first
-                    if (currentSL < minBreakEvenSL && newSL > minBreakEvenSL)
-                    {
-                         newSL = minBreakEvenSL;
-                    }
+                    newSL = minBreakEvenSL;
+                }
 
-                    if (!Trade.PositionModify(ticket, newSL, currentTP))
+                // If SL is currently below the new potential SL (or uninitialized if 0)
+                if (currentSL == 0.0 || currentSL < newSL)
+                {
+                    // Check to avoid modifying with the EXACT same value
+                    if (MathAbs(currentSL - newSL) > (point / 2.0))
                     {
-                        PrintFormat("Trailing Stop (BUY) Guncelleme Hatasi (Ticket %d): %d", ticket, Trade.ResultRetcode());
-                    }
-                    else
-                    {
-                        PrintFormat("Trailing Stop (BUY) Aktif: Ticket %d | SL = %.5f (Kâr: %.0f Puan)", ticket, newSL, profitPoints);
+                        if (!Trade.PositionModify(ticket, newSL, currentTP))
+                        {
+                            PrintFormat("Trailing Stop (BUY) Guncelleme Hatasi (Ticket %d): %d", ticket, Trade.ResultRetcode());
+                        }
+                        else
+                        {
+                            PrintFormat("Trailing Stop (BUY) Aktif: Ticket %d | SL = %.5f (Kâr: %.0f Puan)", ticket, newSL, profitPoints);
+                        }
                     }
                 }
             }
@@ -219,26 +280,29 @@ void CheckExits()
             // Trailing Stop (Break-Even) Logic for SELL
             if (InpBreakEvenPoints > 0 && profitPoints >= InpBreakEvenPoints)
             {
-                double newSL = NormalizeDouble(currPrice + (InpTrailingStep * point), _Digits);
-                // Only move SL DOWN for Sell, and ensure it's at least at Break-Even if profit is >= Break-Even
                 double minBreakEvenSL = openPrice - (1 * point);
+                double newSL = NormalizeDouble(currPrice + (InpTrailingStep * point), _Digits);
 
-                // If SL is currently 0 or we can secure more profit using trailing
-                if (currentSL == 0.0 || (newSL < currentSL && newSL <= minBreakEvenSL))
+                // Ensure newSL is AT LEAST at Break-Even
+                if (newSL > minBreakEvenSL)
                 {
-                    // If we haven't reached break-even SL yet, just set it to Break-Even first
-                    if (currentSL > minBreakEvenSL || currentSL == 0.0)
-                    {
-                         if (newSL < minBreakEvenSL) newSL = minBreakEvenSL;
-                    }
+                    newSL = minBreakEvenSL;
+                }
 
-                    if (!Trade.PositionModify(ticket, newSL, currentTP))
+                // If SL is currently above the new potential SL (or uninitialized if 0)
+                if (currentSL == 0.0 || currentSL > newSL)
+                {
+                    // Check to avoid modifying with the EXACT same value
+                    if (MathAbs(currentSL - newSL) > (point / 2.0))
                     {
-                        PrintFormat("Trailing Stop (SELL) Guncelleme Hatasi (Ticket %d): %d", ticket, Trade.ResultRetcode());
-                    }
-                    else
-                    {
-                        PrintFormat("Trailing Stop (SELL) Aktif: Ticket %d | SL = %.5f (Kâr: %.0f Puan)", ticket, newSL, profitPoints);
+                        if (!Trade.PositionModify(ticket, newSL, currentTP))
+                        {
+                            PrintFormat("Trailing Stop (SELL) Guncelleme Hatasi (Ticket %d): %d", ticket, Trade.ResultRetcode());
+                        }
+                        else
+                        {
+                            PrintFormat("Trailing Stop (SELL) Aktif: Ticket %d | SL = %.5f (Kâr: %.0f Puan)", ticket, newSL, profitPoints);
+                        }
                     }
                 }
             }
@@ -349,21 +413,26 @@ void ExecuteTrades(int direction)
 
         bool res = false;
 
-        // Calculate SL/TP
+        // Calculate Risk, SL/TP
         double point = SymbolInfoDouble(Symbol(), SYMBOL_POINT);
-        double sl = 0.0;
+        double pip   = GetPipValue();
+        double sl    = 0.0;
+
+        // Auto Lot based on SL Pips
+        double lotSizeToTrade = CalculateLotSize(InpStopLossPips);
 
         if (direction == 1) // BUY
         {
             double ask = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
-            sl = NormalizeDouble(ask - InpStopLossPips * point, _Digits);
-            res = Trade.Buy(InpLotSize, Symbol(), ask, sl, 0, InpComment);
+            // Correctly multiply StopLossPips by Pip value (not just 1 Point)
+            sl = NormalizeDouble(ask - (InpStopLossPips * pip), _Digits);
+            res = Trade.Buy(lotSizeToTrade, Symbol(), ask, sl, 0, InpComment);
         }
         else if (direction == -1) // SELL
         {
             double bid = SymbolInfoDouble(Symbol(), SYMBOL_BID);
-            sl = NormalizeDouble(bid + InpStopLossPips * point, _Digits);
-            res = Trade.Sell(InpLotSize, Symbol(), bid, sl, 0, InpComment);
+            sl = NormalizeDouble(bid + (InpStopLossPips * pip), _Digits);
+            res = Trade.Sell(lotSizeToTrade, Symbol(), bid, sl, 0, InpComment);
         }
 
         if (res)
