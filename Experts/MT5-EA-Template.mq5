@@ -658,4 +658,3 @@ void OnTick()
     // Task 11: Dynamic Exits (Run every tick)
     CheckExits();
 }
-
