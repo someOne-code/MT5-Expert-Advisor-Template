@@ -14,19 +14,19 @@
 input group "Strateji Ayarlari"
 input double InpStopLossUSD    = 15.0;   // Islem Basina Max Zarar Kes (USD - Hard SL)
 input double InpLotSize        = 0.01;   // Islem Hacmi (Lot)
-input int    InpMAHours        = 7;      // Hareketli Ortalama Saati (7)
-input int    InpTrendPeriod    = 25;   // Trend Teyidi Mum Sayisi (25)
-input int    InpDelaySeconds   = 20;   // Maksimum Giris Gecikmesi (Saniye)
-input int    InpMinProfitPoints= 150;  // Minimum Kar (Puan / Point)
-input int    InpMaxProfitPoints= 300;  // Maksimum Kar (Puan / Point)
-input int    InpBreakEvenPoints= 100;  // Basa Bas (Break-Even) Aktiflesme Puanı (0=Kapali)
-input int    InpTrailingStep   = 50;   // Takip Eden Zarar-Kes Adimi (Puan)
-input int    InpMinTrades      = 2;    // Min Islem Adedi
-input int    InpMaxTrades      = 7;    // Max Islem Adedi
-input int    InpMomentumTime   = 300;  // Momentum Zaman Siniri (Saniye) (Default: 5 dk)
-input double InpMaxSpreadPoints= 20;   // Max Spread (Puan, 0=Devre Disi) (Default: 20)
-input int    InpMaxOpenPositions = 100;  // Global Maksimum Acik Pozisyon (Default: 1)
-input int    InpMaxTradeHours  = 0;   // Zaman Asimi (Saat) - 24s sonra karda degilse kapat
+input int    InpMAHours        = 70;     // Hareketli Ortalama Saati (70)
+input int    InpTrendPeriod    = 42;     // Trend Teyidi Mum Sayisi (42)
+input int    InpDelaySeconds   = 20;     // Maksimum Giris Gecikmesi (Saniye)
+input int    InpMinProfitPoints= 638;    // Minimum Kar (Puan / Point)
+input int    InpMaxProfitPoints= 2655;   // Maksimum Kar (Puan / Point)
+input int    InpBreakEvenPoints= 100;    // Basa Bas (Break-Even) Aktiflesme Puanı (0=Kapali)
+input int    InpTrailingStep   = 300;    // Takip Eden Zarar-Kes Adimi (Puan)
+input int    InpMinTrades      = 5;      // Min Islem Adedi
+input int    InpMaxTrades      = 7;      // Max Islem Adedi
+input int    InpMomentumTime   = 300;    // Momentum Zaman Siniri (Saniye) (Default: 5 dk)
+input double InpMaxSpreadPoints= 20;     // Max Spread (Puan, 0=Devre Disi) (Default: 20)
+input int    InpMaxOpenPositions = 356;  // Global Maksimum Acik Pozisyon (Default: 1)
+input int    InpMaxTradeHours  = 0;      // Zaman Asimi (Saat) - 24s sonra karda degilse kapat
 
 input group "Zaman Ayarlari (Gate)"
 input bool   InpEnableSundayGate = false;// Pazar Gate Aktif Et
