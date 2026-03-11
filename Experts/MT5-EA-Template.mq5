@@ -12,7 +12,7 @@
 
 //-INPUTS-//
 input group "Strateji Ayarlari"
-input double InpStopLossUSD    = 7000.0; // Islem Basina Max Zarar Kes (USD - Hard SL)
+input double InpStopLossUSD    = 15.0;   // Islem Basina Max Zarar Kes (USD - Hard SL)
 input double InpLotSize        = 0.01;   // Islem Hacmi (Lot)
 input int    InpMAHours        = 7;      // Hareketli Ortalama Saati (7)
 input int    InpTrendPeriod    = 25;   // Trend Teyidi Mum Sayisi (25)
