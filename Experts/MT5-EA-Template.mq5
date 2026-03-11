@@ -40,7 +40,6 @@ input string InpComment        = "JulesEA"; // Emir Yorumu
 
 //-GLOBAL VARIABLES-//
 CTrade Trade; // Trade object
-datetime ExtLastBar = 0; // Last processed bar time
 int    ExtHandleMA = INVALID_HANDLE; // Moving Average Handle
 int    ExtHandleATR = INVALID_HANDLE; // ATR Handle
 
@@ -55,12 +54,22 @@ int           ExtPendingDelay = 0;
 //+------------------------------------------------------------------+
 bool IsNewBar()
 {
-   datetime current = iTime(Symbol(), Period(), 0);
-   if (current == 0) return false;
+   static datetime last_time = 0;
+   datetime current_time[1];
 
-   if (current != ExtLastBar)
+   // CopyTime is the most robust way to get the current bar time in MT5
+   if (CopyTime(Symbol(), Period(), 0, 1, current_time) != 1) return false;
+
+   if (current_time[0] != last_time)
    {
-       ExtLastBar = current;
+       // Protect against the very first initialization tick triggering a false "New Bar" signal
+       if (last_time == 0)
+       {
+           last_time = current_time[0];
+           return false;
+       }
+
+       last_time = current_time[0];
        return true;
    }
    return false;
